@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>3D Viewer Mini App</title>
+
+  <!-- Telegram Web App SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Google Model Viewer -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+
+  <style>
+    :root {
+      --bg-color: #111318;
+      --panel-bg: rgba(26, 29, 36, 0.78);
+      --accent: #3b82f6;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 35%, #222734 0%, #0d0f14 100%);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overscroll-behavior: none;
+    }
+
+    #app {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    model-viewer {
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+      --poster-color: transparent;
+      outline: none;
+    }
+
+    /* Верхняя плашка с именем модели */
+    .top-bar {
+      position: absolute;
+      top: 14px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 5;
+    }
+
+    .model-badge {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 7px 14px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    /* Нижняя панель управления */
+    .controls-bar {
+      position: absolute;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 8px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 6px;
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 5;
+    }
+
+    .ctrl-btn {
+      background: transparent;
+      color: var(--text);
+      border: none;
+      padding: 8px 13px;
+      border-radius: 11px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.2s, color 0.2s;
+      white-space: nowrap;
+    }
+
+    .ctrl-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .ctrl-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* Лоадер */
+    #loader {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(13, 15, 20, 0.85);
+      z-index: 10;
+      transition: opacity 0.3s ease;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 3px solid rgba(255, 255, 255, 0.12);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 12px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    #load-text {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app">
+    <div id="loader">
+      <div class="spinner" id="spinner"></div>
+      <div id="load-text">Загрузка 3D-модели...</div>
+    </div>
+
+    <div class="top-bar">
+      <div class="model-badge">
+        <span class="dot"></span>
+        <span id="model-title">demo.glb</span>
+      </div>
+    </div>
+
+    <model-viewer
+      id="viewer"
+      alt="3D Model"
+      auto-rotate
+      rotation-per-second="22deg"
+      camera-controls
+      touch-action="none"
+      interaction-prompt="auto"
+      shadow-intensity="1.2"
+      shadow-softness="0.8"
+      exposure="1.0"
+      environment-image="neutral">
+    </model-viewer>
+
+    <div class="controls-bar">
+      <button class="ctrl-btn active" id="btn-rotate">🔄 Автоповорот</button>
+      <button class="ctrl-btn" id="btn-reset">🎯 Центрировать</button>
+      <button class="ctrl-btn" id="btn-light">☀️ Свет: 100%</button>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    // Блокируем закрытие окна при вертикальном вращении модели пальцем
+    if (tg.disableVerticalSwipes) {
+      tg.disableVerticalSwipes();
+    }
+
+    const viewer = document.getElementById('viewer');
+    const loader = document.getElementById('loader');
+    const loadText = document.getElementById('load-text');
+    const modelTitle = document.getElementById('model-title');
+
+    // Получаем имя модели из Telegram startapp или из URL ?model=
+    const urlParams = new URLSearchParams(window.location.search);
+    const startParam = tg.initDataUnsafe?.start_param || urlParams.get('tgWebAppStartParam');
+    const rawModelId = startParam || urlParams.get('model') || 'demo';
+
+    // Очищаем имя от лишних символов
+    const safeModelId = rawModelId.replace(/[^a-zA-Z0-9_-]/g, '') || 'demo';
+    modelTitle.textContent = `${safeModelId}.glb`;
+    viewer.src = `models/${safeModelId}.glb`;
+
+    // Прогресс загрузки
+    viewer.addEventListener('progress', (event) => {
+      const pct = Math.round(event.detail.totalProgress * 100);
+      loadText.textContent = `Загрузка 3D: ${pct}%`;
+    });
+
+    viewer.addEventListener('load', () => {
+      loader.style.opacity = '0';
+      setTimeout(() => { loader.style.display = 'none'; }, 300);
+    });
+
+    viewer.addEventListener('error', () => {
+      document.getElementById('spinner').style.display = 'none';
+      loadText.innerHTML = `Не удалось найти файл <b>models/${safeModelId}.glb</b>.<br>Проверьте наличие файла в папке web/models/`;
+    });
+
+    // Кнопка автоповорота
+    const btnRotate = document.getElementById('btn-rotate');
+    btnRotate.addEventListener('click', () => {
+      if (viewer.hasAttribute('auto-rotate')) {
+        viewer.removeAttribute('auto-rotate');
+        btnRotate.classList.remove('active');
+      } else {
+        viewer.setAttribute('auto-rotate', '');
+        btnRotate.classList.add('active');
+      }
+    });
+
+    // Кнопка сброса камеры
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      viewer.cameraOrbit = '0deg 75deg 105%';
+      viewer.fieldOfView = 'auto';
+    });
+
+    // Кнопка переключения яркости экспозиции
+    const exposures = [
+      { val: 1.0, label: '☀️ Свет: 100%' },
+      { val: 1.4, label: '☀️ Свет: 140%' },
+      { val: 0.7, label: '🌙 Свет: 70%' }
+    ];
+    let expIndex = 0;
+    const btnLight = document.getElementById('btn-light');
+    btnLight.addEventListener('click', () => {
+      expIndex = (expIndex + 1) % exposures.length;
+      viewer.exposure = exposures[expIndex].val;
+      btnLight.textContent = exposures[expIndex].label;
+    });
+  </script>
+</body>
+</html>
